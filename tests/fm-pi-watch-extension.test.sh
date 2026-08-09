@@ -7,10 +7,20 @@ set -u
 
 TMP_ROOT=$(fm_test_tmproot fm-pi-watch-extension)
 EXT="$ROOT/.pi/extensions/fm-primary-pi-watch.ts"
-# Node 24 warns when these test-only dynamic imports load tracked ESM plugins
-# from a clean checkout with no tracked .opencode/package.json. The warning is
+# Node warns when these test-only dynamic imports load tracked ESM plugins from
+# a clean checkout with no tracked .opencode/package.json. The warning is
 # unrelated to plugin output, which the assertions intentionally require empty.
 export NODE_NO_WARNINGS=1
+
+# The production extensions are TypeScript. Load them through Pi's bundled Jiti
+# loader instead of depending on the host Node build's optional TS support.
+command -v npm >/dev/null 2>&1 \
+  || { echo 'not ok - npm is required to locate Pi\x27s extension loader' >&2; exit 1; }
+PI_PACKAGE_DIR=${FM_PI_PACKAGE_DIR:-"$(npm root -g)/@earendil-works/pi-coding-agent"}
+JITI_REGISTER="$PI_PACKAGE_DIR/node_modules/jiti/lib/jiti-register.mjs"
+[ -f "$JITI_REGISTER" ] \
+  || { echo 'not ok - installed Pi package is missing its Jiti extension loader' >&2; exit 1; }
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import=$JITI_REGISTER"
 
 install_pi_watch_extension_fixture() {
   local repo=$1
@@ -90,7 +100,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 if (!handler) {
   console.error("Pi watch command was not registered");
   process.exit(1);
@@ -164,15 +174,15 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 if (!tool) throw new Error("Pi watch tool was not registered");
 if (tool.label !== "Arm firstmate watcher") throw new Error(`unexpected label: ${tool.label}`);
 if (tool.parameters?.type !== "object") throw new Error("tool parameters are not a TypeBox object schema");
 const metadata = [tool.description, tool.promptSnippet, ...(tool.promptGuidelines ?? [])].join("\n");
 if (metadata.includes("Always use this tool")) throw new Error(`broad tool-selection metadata remained visible: ${metadata}`);
-if (!tool.description.includes("first required Pi watcher cycle")) throw new Error(`tool description omitted the first-cycle condition: ${tool.description}`);
-if (!tool.promptSnippet.includes("ordinary re-arming is automatic")) throw new Error(`tool snippet omitted automatic continuation: ${tool.promptSnippet}`);
-if (!tool.promptGuidelines.some((guideline) => guideline.includes("ordinary signal, stale, check, or heartbeat handling"))) {
+if (!tool.description.includes("Pi lifecycle automatically establishes fresh generations")) throw new Error(`tool description omitted lifecycle ownership: ${tool.description}`);
+if (!tool.promptSnippet.includes("fresh generations and ordinary re-arming are automatic")) throw new Error(`tool snippet omitted automatic lifecycle ownership: ${tool.promptSnippet}`);
+if (!tool.promptGuidelines.some((guideline) => guideline.includes("after startup, session replacement"))) {
   throw new Error(`tool guidelines omitted ordinary-notification prevention: ${tool.promptGuidelines}`);
 }
 const result = await tool.execute("tool-call-1", {}, undefined, undefined, {});
@@ -231,7 +241,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 const initial = await tool.execute("tool-call-first", {}, undefined, undefined, {});
 if (!initial.content[0]?.text.includes("started Pi extension arm child")) {
   throw new Error(`initial call did not start the arm child: ${initial.content[0]?.text}`);
@@ -291,7 +301,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-first", {}, undefined, undefined, {});
 let redundant = null;
 for (let i = 0; i < 100; i += 1) {
@@ -368,7 +378,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-continuity", {}, undefined, undefined, {});
 for (let i = 0; i < 250; i += 1) {
   const rows = existsSync(process.env.FM_ARM_LOG)
@@ -439,7 +449,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-hung-successor", {}, undefined, undefined, {});
 for (let i = 0; i < 500 && !prompt; i += 1) {
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -511,7 +521,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-unretired-successor", {}, undefined, undefined, {});
 for (let i = 0; i < 500 && !prompt; i += 1) {
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -595,7 +605,7 @@ async function waitFor(predicate, message) {
 }
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-late-close", {}, undefined, undefined, {});
 await waitFor(
   () => existsSync(process.env.FM_UNRETIRED_READY_FILE),
@@ -667,7 +677,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-empty", {}, undefined, undefined, {});
 for (let i = 0; i < 250; i += 1) {
   const rows = existsSync(process.env.FM_ARM_LOG)
@@ -722,7 +732,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-established-empty", {}, undefined, undefined, {});
 for (let i = 0; i < 250 && !prompt; i += 1) {
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -776,7 +786,7 @@ const pi = {
 const lock = `${process.env.FM_HOME}/state/.lock`;
 writeFileSync(lock, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-lock-close", {}, undefined, undefined, {});
 const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
 try {
@@ -827,7 +837,7 @@ const pi = {
   sendUserMessage: async () => {},
 };
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 if (!tool) throw new Error("Pi watch tool was not registered");
 
 const lock = `${process.env.FM_HOME}/state/.lock`;
@@ -954,11 +964,11 @@ writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
 
 const startup = makePi();
-mod.default(startup.pi);
+(mod.default?.default ?? mod.default)(startup.pi);
 await startup.handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, {});
 const first = await startup.getTool().execute("startup", {}, undefined, undefined, {});
-if (!first.details?.ok || !String(first.details.message).includes("started Pi extension arm child")) {
-  throw new Error(`startup arm failed: ${JSON.stringify(first.details)}`);
+if (!first.details?.ok || !String(first.details.message).includes("unchanged")) {
+  throw new Error(`startup lifecycle did not already own its arm child: ${JSON.stringify(first.details)}`);
 }
 await waitFor(() => existsSync(process.env.FM_CHILD_PID_FILE), "startup child");
 const startupChild = readFileSync(process.env.FM_CHILD_PID_FILE, "utf8").trim();
@@ -974,7 +984,7 @@ async function replaceSession(previous, reason) {
     await waitFor(() => !pidAlive(previousChild), `${reason} previous child exit`);
   }
   const next = makePi();
-  mod.default(next.pi);
+  (mod.default?.default ?? mod.default)(next.pi);
   await next.handlers.get("session_start")?.({
     type: "session_start",
     reason,
@@ -1084,7 +1094,7 @@ const pi = {
 };
 const before = process.listenerCount("exit");
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 if (process.listenerCount("exit") !== before + 1) {
   throw new Error("Pi extension did not install exactly one process-exit fallback");
 }
@@ -1138,7 +1148,7 @@ const pi = {
 };
 writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
 const mod = await import(pathToFileURL(process.env.PLUGIN).href);
-mod.default(pi);
+(mod.default?.default ?? mod.default)(pi);
 await tool.execute("tool-call-exit", {}, undefined, undefined, {});
 for (let i = 0; i < 250 && !existsSync(process.env.FM_CHILD_PID_FILE); i += 1) {
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -2124,6 +2134,137 @@ EOF
   pass "OpenCode healthy arm output does not suppress the turn-end guard"
 }
 
+test_pi_lifecycle_automatically_establishes_fresh_and_replaced_generations() {
+  local repo home child_pid_file arm_log stop_file out status
+  repo="$TMP_ROOT/pi-auto-generation-root"
+  home="$TMP_ROOT/pi-auto-generation-home"
+  child_pid_file="$TMP_ROOT/pi-auto-generation-child.pid"
+  arm_log="$TMP_ROOT/pi-auto-generation-arm.log"
+  stop_file="$TMP_ROOT/pi-auto-generation.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'watcher: started pid=%s\n' "$$"
+printf '%s\n' "$$" > "${FM_CHILD_PID_FILE:?}"
+printf 'arm pid=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+trap 'exit 0' TERM INT
+while [ ! -e "${FM_STOP_FILE:?}" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$repo/.pi/extensions/fm-primary-pi-watch.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_CHILD_PID_FILE="$child_pid_file" FM_ARM_LOG="$arm_log" FM_STOP_FILE="$stop_file" node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+function makePi() {
+  const handlers = new Map();
+  return {
+    handlers,
+    pi: {
+      on(event, handler) { handlers.set(event, handler); },
+      registerCommand() {},
+      registerTool() {},
+      sendUserMessage: async () => { throw new Error("healthy automatic arm should not prompt"); },
+      events: { on() {} },
+    },
+  };
+}
+
+function alive(pid) {
+  try { process.kill(Number(pid), 0); return true; } catch { return false; }
+}
+
+async function waitFor(predicate, label) {
+  for (let i = 0; i < 250; i += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+const lock = `${process.env.FM_HOME}/state/.lock`;
+writeFileSync(lock, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+
+const first = makePi();
+(mod.default?.default ?? mod.default)(first.pi);
+await first.handlers.get("session_start")?.({ reason: "startup" }, {});
+await waitFor(() => existsSync(process.env.FM_ARM_LOG), "fresh automatic arm");
+const firstChild = readFileSync(process.env.FM_CHILD_PID_FILE, "utf8").trim();
+if (!alive(firstChild)) throw new Error("fresh automatic arm child is not live");
+await first.handlers.get("agent_settled")?.({}, {});
+await new Promise((resolve) => setTimeout(resolve, 100));
+if (readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n").length !== 1) {
+  throw new Error("settled callback created a second arm child");
+}
+
+await first.handlers.get("session_shutdown")?.({ reason: "new" }, {});
+await waitFor(() => !alive(firstChild), "retired fresh child");
+const replacement = makePi();
+(mod.default?.default ?? mod.default)(replacement.pi);
+await replacement.handlers.get("session_start")?.({ reason: "new" }, {});
+await waitFor(() => readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n").length === 2, "replacement automatic arm");
+const replacementChild = readFileSync(process.env.FM_CHILD_PID_FILE, "utf8").trim();
+if (!alive(replacementChild) || replacementChild === firstChild) {
+  throw new Error("replacement generation did not own one new arm child");
+}
+await replacement.handlers.get("agent_settled")?.({}, {});
+await new Promise((resolve) => setTimeout(resolve, 100));
+if (readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n").length !== 2) {
+  throw new Error("replacement settled callback created a parallel arm child");
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+await waitFor(() => !alive(replacementChild), "replacement child cleanup");
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi lifecycle must automatically establish exactly one fresh and replacement watcher cycle: $out"
+  [ -z "$out" ] || fail "Pi automatic-generation test printed output: $out"
+  pass "Pi lifecycle automatically establishes one watcher cycle for fresh and replacement generations"
+}
+
+test_pi_lifecycle_surfaces_automatic_establishment_failure() {
+  local repo home out status
+  repo="$TMP_ROOT/pi-auto-failure-root"
+  home="$TMP_ROOT/pi-auto-failure-home"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$repo/.pi/extensions/fm-primary-pi-watch.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=1 node --input-type=module 2>&1 <<'EOF'
+import { writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+const handlers = new Map();
+let prompt = "";
+const pi = {
+  on(event, handler) { handlers.set(event, handler); },
+  registerCommand() {},
+  registerTool() {},
+  sendUserMessage: async (message) => { prompt = message; },
+  events: { on() {} },
+};
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+(mod.default?.default ?? mod.default)(pi);
+await handlers.get("session_start")?.({ reason: "startup" }, {});
+for (let i = 0; i < 250 && !prompt; i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+if (!prompt.includes("could not restore watcher continuity after 1 retries")) {
+  throw new Error(`automatic establishment failure was not surfaced: ${prompt}`);
+}
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi lifecycle must surface an automatic establishment failure: $out"
+  [ -z "$out" ] || fail "Pi automatic-failure test printed output: $out"
+  pass "Pi lifecycle surfaces automatic watcher-establishment failures"
+}
+
 test_pi_extension_reports_external_healthy_watcher
 test_pi_tool_returns_agent_tool_result
 test_pi_redundant_tool_call_is_owned_noop
@@ -2139,6 +2280,8 @@ test_pi_arm_distinguishes_session_lock_ownership
 test_pi_session_transition_generation_owner
 test_pi_process_exit_cleanup_listener_lifecycle
 test_pi_process_exit_cleanup_stops_arm_child
+test_pi_lifecycle_automatically_establishes_fresh_and_replaced_generations
+test_pi_lifecycle_surfaces_automatic_establishment_failure
 test_opencode_plugin_package_boundary_is_explicit_esm
 test_opencode_primary_watch_plugin_uses_effective_state_home
 test_opencode_primary_watch_plugin_sources_effective_config

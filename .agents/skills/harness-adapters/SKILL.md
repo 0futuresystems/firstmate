@@ -296,9 +296,9 @@ Pi sets `PI_CODING_AGENT=true` for its children; this is its harness-detection e
 **Primary-session guard fact (verified 2026-07-09, Pi 0.80.5).**
 The firstmate PRIMARY's own `.pi/extensions/fm-primary-turnend-guard.ts` listens for logical-run `agent_settled`, not per-tool-loop `turn_end`, and uses `pi.sendUserMessage(..., { deliverAs: "followUp" })` to force one guarded follow-up when `bin/fm-turnend-guard.sh` returns 2.
 Without `deliverAs: "followUp"`, Pi rejects the send while the agent is still processing.
-Pi's primary watcher protocol also requires the tracked `.pi/extensions/fm-primary-pi-watch.ts` extension, same trust-once discovery as the turn-end guard.
-The model arms through `fm_watch_arm_pi`, never a foreground bash arm; the watcher tool result and clean-exit fallback are owned by `docs/supervision-protocols/pi.md`.
-`bin/fm-session-start.sh` reports when the live Pi-family session has not loaded both the turn-end guard and watcher extensions, and points at the selected executable after project trust as the fix, with `-e` as a trust-free fallback.
+Pi primaries start through `bin/fm-pi.sh`, which supplies the tracked watcher and turn-end extensions by absolute path without global installation or project-trust dependence.
+The Pi lifecycle establishes fresh generations and re-arms ordinary cycles; `fm_watch_arm_pi` is repair-only and never a foreground bash arm. The watcher tool result and clean-exit fallback are owned by `docs/supervision-protocols/pi.md`.
+`bin/fm-session-start.sh` reports when the live Pi-family session has not loaded both extensions and directs recovery through `bin/fm-pi.sh`.
 When a secondmate is launched on Pi or pi-signed, `fm-spawn.sh --secondmate` launches the selected executable with both `-e .pi/extensions/fm-primary-turnend-guard.ts` and `-e .pi/extensions/fm-primary-pi-watch.ts`, both already present in the secondmate home's git worktree.
 
 ## grok (VERIFIED 2026-06-29, grok 0.2.73; slash-submit re-verified 2026-07-03 on 0.2.82; reasoning-effort ceiling re-verified 2026-07-13 on 0.2.99; exit paths re-verified 2026-07-19 on grok 0.2.103)

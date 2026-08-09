@@ -99,13 +99,13 @@ grok --trust
 **Pi**
 
 ```sh
-pi
+bin/fm-pi.sh
 # or, when the signed wrapper is installed
-FM_PI_HARNESS=pi-signed pi-signed
+FM_PI_HARNESS=pi-signed bin/fm-pi.sh
 ```
 
 For Grok, `--trust` is needed once per clone so project hooks and the turn-end guard load; `/hooks-trust` inside Grok works too.
-For Pi, approve the project trust prompt once per clone on first launch so the tracked `.pi/extensions/*.ts` files auto-load.
+`bin/fm-pi.sh` disables cwd-dependent discovery and supplies Firstmate's tracked Pi extensions by absolute path, so it keeps working when the primary's cwd is a managed project and does not install extensions globally.
 Pi's `/calm` toggle hides supported transcript chrome, including canonically classified Firstmate operational user rows, and uses a Calm-only animated working boat during active runs while preserving all model context and session data.
 The hidden operational inputs remain ordinary user-role messages with unchanged delivery, ordering, authority, persistence, and exports.
 The preference persists for the effective Firstmate home, and toggling it off restores ordinary rendering.

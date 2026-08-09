@@ -133,6 +133,8 @@ test_pi_signed_preserves_identity_with_pi_supervision_protocol() {
   out=$("$RENDER" --harness pi-signed --repair-line)
   assert_contains "$out" "Pi tool fm_watch_arm_pi" \
     "pi-signed repair semantics diverged from Pi"
+  assert_contains "$out" "FM_PI_HARNESS=pi-signed" \
+    "pi-signed repair did not preserve the selected wrapper identity"
   pass "pi-signed keeps its identity while sharing Pi's supervision protocol"
 }
 
@@ -167,7 +169,7 @@ test_pi_snippet_uses_effective_extension_path() {
   watch="$ROOT/.pi/extensions/fm-primary-pi-watch.ts"
   mkdir -p "$home/state" "$home/config"
   out=$(FM_HOME="$home" "$RENDER" --harness pi)
-  assert_contains "$out" "-e $turnend -e $watch" "pi snippet did not render both effective extension launch paths"
+  assert_contains "$out" "bin/fm-pi.sh" "pi snippet did not render the required absolute-path launcher"
   assert_contains "$out" "The turn-end guard extension lives at \`$turnend\`" "pi snippet did not render the turn-end guard extension path"
   assert_contains "$out" "The watcher extension lives at \`$watch\`" "pi snippet did not render the watcher extension path"
   assert_not_contains "$out" "__FM_PI_EXT__" "renderer leaked the Pi extension path placeholder"

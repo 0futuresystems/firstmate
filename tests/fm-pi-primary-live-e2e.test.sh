@@ -258,13 +258,15 @@ cp "$ROOT/.pi/extensions/lib/fm-calm-working-ship.ts" "$PROJECT/.pi/extensions/l
 cp "$ROOT/.pi/extensions/lib/fm-operational-input.ts" "$PROJECT/.pi/extensions/lib/fm-operational-input.ts"
 cp "$ROOT/.pi/extensions/fm-primary-turnend-guard.ts" "$PROJECT/.pi/extensions/fm-primary-turnend-guard.ts"
 cp "$ROOT/bin/fm-watch-arm.sh" "$PROJECT/bin/fm-watch-arm.sh"
+cp "$ROOT/bin/fm-pi.sh" "$PROJECT/bin/fm-pi.sh"
 cp "$ROOT/bin/fm-operational-input.sh" "$PROJECT/bin/fm-operational-input.sh"
 cp "$ROOT/bin/fm-supervision-instructions.sh" "$PROJECT/bin/fm-supervision-instructions.sh"
 chmod +x "$PROJECT/bin/fm-operational-input.sh"
+chmod +x "$PROJECT/bin/fm-pi.sh"
 mkdir -p "$HOME_DIR/state" "$HOME_DIR/config"
 
 "$TMUX" -L "$SOCKET" new-session -d -s "$SESSION" -c "$PROJECT" \
-  "env FM_HOME='$HOME_DIR' FM_ROOT_OVERRIDE='$PROJECT' FM_POLL=1 FM_SIGNAL_GRACE=0 FM_HEARTBEAT=600 bash -lc 'printf \"%s\\n\" \"\$\$\" > \"\$FM_HOME/state/.lock\"; pi --approve --no-session --no-context-files --no-extensions -e .pi/extensions/fm-calm.ts -e .pi/extensions/fm-primary-turnend-guard.ts -e .pi/extensions/fm-primary-pi-watch.ts --model openai-codex/gpt-5.6-sol --thinking low; rc=\$?; printf \"PI_EXIT=%s\\n\" \"\$rc\"; sleep 300'"
+  "env FM_HOME='$HOME_DIR' FM_ROOT_OVERRIDE='$PROJECT' FM_POLL=1 FM_SIGNAL_GRACE=0 FM_HEARTBEAT=600 bash -lc 'printf \"%s\\n\" \"\$\$\" > \"\$FM_HOME/state/.lock\"; \"$PROJECT/bin/fm-pi.sh\" --approve --no-session --no-context-files --model openai-codex/gpt-5.6-sol --thinking low; rc=\$?; printf \"PI_EXIT=%s\\n\" \"\$rc\"; sleep 300'"
 
 i=0
 while [ "$i" -lt 120 ]; do
@@ -274,7 +276,7 @@ while [ "$i" -lt 120 ]; do
 done
 [ -f "$HOME_DIR/state/.pi-turnend-extension-loaded" ] || fail "Pi turn-end extension did not load"
 [ -f "$HOME_DIR/state/.pi-watch-extension-loaded" ] || fail "Pi watcher extension did not load"
-wait_for_text "(openai-codex)" 120 || fail "Pi did not reach its ready composer"
+wait_for_text "gpt-5.6-sol" 120 || fail "Pi $PI_VERSION did not reach its ready composer"
 sleep 1
 
 send_prompt "/calm"
@@ -304,8 +306,14 @@ send_prompt "/calm"
 sleep 0.2
 
 : > "$HOME_DIR/state/pi-e2e.meta"
-send_prompt "Start supervision with fm_watch_arm_pi and never use bash to arm supervision. After the watcher wake arrives, run bin/fm-wake-drain.sh and reply exactly HANDLED."
-wait_for_text "watcher: started Pi extension arm child 1" || fail "Pi did not render the initial watcher tool result"
+i=0
+while [ "$i" -lt 120 ]; do
+  [ -f "$HOME_DIR/state/.watch.lock/pid" ] && break
+  sleep 0.5
+  i=$((i + 1))
+done
+[ -f "$HOME_DIR/state/.watch.lock/pid" ] || fail "Pi lifecycle did not establish the initial watcher"
+send_prompt "After the watcher wake arrives, run bin/fm-wake-drain.sh and reply exactly HANDLED."
 
 printf 'done: pi live e2e watcher fire\n' > "$HOME_DIR/state/pi-e2e.status"
 i=0
@@ -326,7 +334,7 @@ if printf '%s\n' "$pane" | grep -Fq "$foreground_arm"; then
   fail "Pi used a foreground bash watcher arm"
 fi
 arm_tool_result_count=$(printf '%s\n' "$pane" | grep -Ec 'watcher: (started|unchanged|not armed|read-only)' || true)
-[ "$arm_tool_result_count" -eq 1 ] || fail "Pi model re-armed from memory instead of the extension (tool-result count $arm_tool_result_count)"
+[ "$arm_tool_result_count" -eq 0 ] || fail "Pi model issued a watcher arm despite lifecycle-owned establishment (tool-result count $arm_tool_result_count)"
 
 pid_file=$(find "$HOME_DIR/state" -maxdepth 3 -type f -name pid | head -1)
 [ -n "$pid_file" ] || fail "re-armed watcher pid was not recorded"
