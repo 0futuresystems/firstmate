@@ -18,7 +18,7 @@ SH
 }
 
 test_launcher_loads_absolute_extensions_from_child_cwd() {
-  local fake child log out
+  local fake child log out watch_line guard_line
   fake="$TMP_ROOT/plain-bin"
   child="$TMP_ROOT/child-project"
   log="$TMP_ROOT/plain.log"
@@ -32,6 +32,9 @@ test_launcher_loads_absolute_extensions_from_child_cwd() {
   assert_contains "$(cat "$log")" "arg=$ROOT/.pi/extensions/fm-calm.ts" "Pi launcher omitted the absolute Calm extension"
   assert_contains "$(cat "$log")" "arg=$ROOT/.pi/extensions/fm-primary-turnend-guard.ts" "Pi launcher omitted the absolute turn-end extension"
   assert_contains "$(cat "$log")" "arg=$ROOT/.pi/extensions/fm-primary-pi-watch.ts" "Pi launcher omitted the absolute watcher extension"
+  watch_line=$(grep -nF "arg=$ROOT/.pi/extensions/fm-primary-pi-watch.ts" "$log" | cut -d: -f1)
+  guard_line=$(grep -nF "arg=$ROOT/.pi/extensions/fm-primary-turnend-guard.ts" "$log" | cut -d: -f1)
+  [ "$watch_line" -lt "$guard_line" ] || fail "Pi launcher loaded the turn-end guard before watcher establishment"
   assert_contains "$(cat "$log")" 'arg=hello' "Pi launcher did not preserve user arguments"
   pass "Pi launcher loads absolute primary extensions without changing child project cwd"
 }

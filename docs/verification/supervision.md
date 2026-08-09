@@ -229,6 +229,19 @@ Observed output:
 ok - Pi 0.84.1 live E2E covered the Calm working ship, Ahoy first/later messages, legacy transcripts, near misses, and watcher continuity
 ```
 
+The post-lock readiness ordering and launcher-bound markers were live-verified again on 2026-08-09 in a fresh primary started through `bin/fm-pi.sh`.
+A delayed scratch worker produced automatic completion notifications without an `fm_watch_arm_pi` call, and each actionable close recorded its verified successor before delivery.
+
+```text
+watch marker: sha256:bb91b5760247b8cc934204fd406d24f6d09c122757ab990f2e037167ecfcc41c / pid 700313 / launcher=pi
+turn-end marker: sha256:7d82a5dd37a483fca09b3f78b1f80b7884e1f8d265232058601557373bd135d3 / pid 700313 / launcher=pi
+reason=actionable-signal ... successor=started:704003
+reason=actionable-signal ... successor=started:706305
+monitoring owners: 1
+heartbeat age: 9s
+model-issued fm_watch_arm_pi calls: 0
+```
+
 Pi same-process session-transition ownership was verified on 2026-07-27 against the tracked extension with a faithful in-process factory rebind (module cache retained, real arm children):
 
 ```sh

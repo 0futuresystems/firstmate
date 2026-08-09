@@ -2223,6 +2223,91 @@ EOF
   pass "Pi lifecycle automatically establishes one watcher cycle for fresh and replacement generations"
 }
 
+test_pi_descendant_extension_cannot_overwrite_primary_marker() {
+  local repo home marker out status
+  repo="$TMP_ROOT/pi-descendant-marker-root"
+  home="$TMP_ROOT/pi-descendant-marker-home"
+  marker="$home/state/.pi-watch-extension-loaded"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  out=$(PLUGIN="$repo/.pi/extensions/fm-primary-pi-watch.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_PI_HARNESS=pi node --input-type=module 2>&1 <<'EOF'
+import { readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+
+const marker = `${process.env.FM_HOME}/state/.pi-watch-extension-loaded`;
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+writeFileSync(marker, `primary-marker\n${process.pid}\nlauncher=pi\n`);
+const child = spawnSync("bash", ["-lc", `"${process.execPath}" --input-type=module; rc=$?; :; exit $rc`], {
+  encoding: "utf8",
+  env: process.env,
+  input: `
+    import { pathToFileURL } from "node:url";
+    const pi = { on() {}, registerCommand() {}, registerTool() {}, sendUserMessage: async () => {}, events: { on() {} } };
+    const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+    (mod.default?.default ?? mod.default)(pi);
+  `,
+});
+if (child.status !== 0) throw new Error(`descendant import failed: ${child.stderr}`);
+const loaded = readFileSync(marker, "utf8");
+if (loaded !== `primary-marker\n${process.pid}\nlauncher=pi\n`) {
+  throw new Error(`descendant extension overwrote the primary marker: ${loaded}`);
+}
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "A descendant Pi invocation must not overwrite the primary extension marker: $out"
+  [ -z "$out" ] || fail "Pi descendant-marker test printed output: $out"
+  pass "Pi descendant extension cannot overwrite the primary marker"
+}
+
+test_pi_postlock_settled_waits_for_ready_initial_cycle() {
+  local repo home child_pid_file stop_file out status
+  repo="$TMP_ROOT/pi-postlock-ready-root"
+  home="$TMP_ROOT/pi-postlock-ready-home"
+  child_pid_file="$TMP_ROOT/pi-postlock-ready-child.pid"
+  stop_file="$TMP_ROOT/pi-postlock-ready.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+sleep 0.15
+printf 'watcher: started pid=%s\n' "$$"
+printf '%s\n' "$$" > "${FM_CHILD_PID_FILE:?}"
+trap 'exit 0' TERM INT
+while [ ! -e "${FM_STOP_FILE:?}" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$repo/.pi/extensions/fm-primary-pi-watch.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_CHILD_PID_FILE="$child_pid_file" FM_STOP_FILE="$stop_file" node --input-type=module 2>&1 <<'EOF'
+import { existsSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+const handlers = new Map();
+const pi = {
+  on(event, handler) { handlers.set(event, handler); },
+  registerCommand() {},
+  registerTool() {},
+  sendUserMessage: async () => { throw new Error("healthy post-lock establishment should not prompt"); },
+  events: { on() {} },
+};
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+(mod.default?.default ?? mod.default)(pi);
+await handlers.get("session_start")?.({ reason: "startup" }, {});
+if (existsSync(process.env.FM_CHILD_PID_FILE)) throw new Error("session_start armed before the session lock existed");
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const startedAt = Date.now();
+await handlers.get("agent_settled")?.({}, {});
+const elapsed = Date.now() - startedAt;
+if (!existsSync(process.env.FM_CHILD_PID_FILE)) throw new Error("post-lock settled callback returned before watcher readiness");
+if (elapsed < 100) throw new Error(`post-lock settled callback returned too early: ${elapsed}ms`);
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi post-lock settled callback must wait for initial watcher readiness: $out"
+  [ -z "$out" ] || fail "Pi post-lock readiness test printed output: $out"
+  pass "Pi post-lock settled callback waits for initial watcher readiness"
+}
+
 test_pi_lifecycle_surfaces_automatic_establishment_failure() {
   local repo home out status
   repo="$TMP_ROOT/pi-auto-failure-root"
@@ -2281,6 +2366,8 @@ test_pi_session_transition_generation_owner
 test_pi_process_exit_cleanup_listener_lifecycle
 test_pi_process_exit_cleanup_stops_arm_child
 test_pi_lifecycle_automatically_establishes_fresh_and_replaced_generations
+test_pi_descendant_extension_cannot_overwrite_primary_marker
+test_pi_postlock_settled_waits_for_ready_initial_cycle
 test_pi_lifecycle_surfaces_automatic_establishment_failure
 test_opencode_plugin_package_boundary_is_explicit_esm
 test_opencode_primary_watch_plugin_uses_effective_state_home

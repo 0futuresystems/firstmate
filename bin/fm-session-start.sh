@@ -238,13 +238,16 @@ hash_file() {
 }
 
 pi_extension_loaded() {
-  local marker=$1 expected_version=$2 lock=$3 marker_version marker_pid lock_pid
+  local marker=$1 expected_version=$2 lock=$3 expected_launcher=$4 marker_version marker_pid marker_launcher lock_pid
   [ -f "$marker" ] && [ -f "$lock" ] && [ -n "$expected_version" ] || return 1
   marker_version=$(sed -n '1p' "$marker")
   marker_pid=$(sed -n '2p' "$marker")
+  marker_launcher=$(sed -n '3p' "$marker")
   lock_pid=$(sed -n '1p' "$lock")
   [ -n "$marker_pid" ] || return 1
-  [ "$marker_version" = "$expected_version" ] && [ "$marker_pid" = "$lock_pid" ]
+  [ "$marker_version" = "$expected_version" ] \
+    && [ "$marker_pid" = "$lock_pid" ] \
+    && [ "$marker_launcher" = "launcher=$expected_launcher" ]
 }
 
 section "SESSION START - $FM_HOME"
@@ -329,8 +332,8 @@ if [ "$PRIMARY_HARNESS" = pi ] || [ "$PRIMARY_HARNESS" = pi-signed ]; then
   PI_LOCK="$STATE/.lock"
   PI_WATCH_VERSION=$(hash_file "$PI_EXT" || printf '')
   PI_TURNEND_VERSION=$(hash_file "$PI_TURNEND_EXT" || printf '')
-  if ! pi_extension_loaded "$PI_WATCH_MARKER" "$PI_WATCH_VERSION" "$PI_LOCK" \
-    || ! pi_extension_loaded "$PI_TURNEND_MARKER" "$PI_TURNEND_VERSION" "$PI_LOCK"; then
+  if ! pi_extension_loaded "$PI_WATCH_MARKER" "$PI_WATCH_VERSION" "$PI_LOCK" "$PRIMARY_HARNESS" \
+    || ! pi_extension_loaded "$PI_TURNEND_MARKER" "$PI_TURNEND_VERSION" "$PI_LOCK" "$PRIMARY_HARNESS"; then
     printf 'PI_WATCH_EXTENSION: not loaded - this Pi primary has no lifecycle-owned watcher establishment; restart through %s/bin/fm-pi.sh%s so %s and %s load by absolute path\n' "$FM_ROOT" "$( [ "$PRIMARY_HARNESS" = pi-signed ] && printf ' with FM_PI_HARNESS=pi-signed' )" "$PI_TURNEND_EXT" "$PI_EXT"
   fi
 fi

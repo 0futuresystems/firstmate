@@ -17,6 +17,7 @@ const fmHome = process.env.FM_HOME || process.env.FM_ROOT_OVERRIDE || root;
 const state = process.env.FM_STATE_OVERRIDE || `${fmHome}/state`;
 const marker = `${state}/.pi-turnend-extension-loaded`;
 const extensionVersion = `sha256:${createHash("sha256").update(readFileSync(extensionFile)).digest("hex")}`;
+const launchIdentity = process.env.FM_PI_HARNESS || "";
 
 function parentPid(pid: string): string {
   const result = spawnSync("ps", ["-o", "ppid=", "-p", pid], { encoding: "utf8" });
@@ -51,8 +52,14 @@ function lockOwnership(): LockOwnership {
 }
 
 function markLoaded(): void {
-  if (!existsSync(state) || lockOwnership() === "other") return;
-  writeFileSync(marker, `${extensionVersion}\n${process.pid}\n`);
+  if (!existsSync(state)) return;
+  const ownership = lockOwnership();
+  if (ownership === "other") return;
+  if (ownership === "owned") {
+    const lockPid = readFileSync(`${state}/.lock`, "utf8").trim();
+    if (lockPid !== String(process.pid) && parentPid(String(process.pid)) !== lockPid) return;
+  }
+  writeFileSync(marker, `${extensionVersion}\n${process.pid}\nlauncher=${launchIdentity}\n`);
 }
 
 function runSessionstartNudge(): string {

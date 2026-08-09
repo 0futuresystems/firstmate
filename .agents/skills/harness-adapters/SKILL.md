@@ -296,8 +296,8 @@ Pi sets `PI_CODING_AGENT=true` for its children; this is its harness-detection e
 **Primary-session guard fact (verified 2026-07-09, Pi 0.80.5).**
 The firstmate PRIMARY's own `.pi/extensions/fm-primary-turnend-guard.ts` listens for logical-run `agent_settled`, not per-tool-loop `turn_end`, and uses `pi.sendUserMessage(..., { deliverAs: "followUp" })` to force one guarded follow-up when `bin/fm-turnend-guard.sh` returns 2.
 Without `deliverAs: "followUp"`, Pi rejects the send while the agent is still processing.
-Pi primaries start through `bin/fm-pi.sh`, which supplies the tracked watcher and turn-end extensions by absolute path without global installation or project-trust dependence.
-The Pi lifecycle establishes fresh generations and re-arms ordinary cycles; `fm_watch_arm_pi` is repair-only and never a foreground bash arm. The watcher tool result and clean-exit fallback are owned by `docs/supervision-protocols/pi.md`.
+Pi primaries start through `bin/fm-pi.sh`, which supplies the tracked watcher before the turn-end guard by absolute path, binds their loaded markers to the launcher identity, and avoids global installation or project-trust dependence.
+The Pi lifecycle waits for the post-lock initial cycle to become ready before the later-loaded guard runs, establishes fresh generations, and re-arms ordinary cycles; `fm_watch_arm_pi` is repair-only and never a foreground bash arm. The watcher tool result and clean-exit fallback are owned by `docs/supervision-protocols/pi.md`.
 `bin/fm-session-start.sh` reports when the live Pi-family session has not loaded both extensions and directs recovery through `bin/fm-pi.sh`.
 When a secondmate is launched on Pi or pi-signed, `fm-spawn.sh --secondmate` launches the selected executable with both `-e .pi/extensions/fm-primary-turnend-guard.ts` and `-e .pi/extensions/fm-primary-pi-watch.ts`, both already present in the secondmate home's git worktree.
 

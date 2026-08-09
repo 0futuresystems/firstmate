@@ -539,21 +539,21 @@ install_pi_watch_extension_fixture() {
 }
 
 write_pi_watch_loaded_marker() {
-  local home=$1 root=$2 pid=$3 version
+  local home=$1 root=$2 pid=$3 launcher=${4:-pi} version
   version=$(hash_file_for_test "$root/.pi/extensions/fm-primary-pi-watch.ts")
-  printf '%s\n%s\n' "$version" "$pid" > "$home/state/.pi-watch-extension-loaded"
+  printf '%s\n%s\nlauncher=%s\n' "$version" "$pid" "$launcher" > "$home/state/.pi-watch-extension-loaded"
 }
 
 write_pi_turnend_loaded_marker() {
-  local home=$1 root=$2 pid=$3 version
+  local home=$1 root=$2 pid=$3 launcher=${4:-pi} version
   version=$(hash_file_for_test "$root/.pi/extensions/fm-primary-turnend-guard.ts")
-  printf '%s\n%s\n' "$version" "$pid" > "$home/state/.pi-turnend-extension-loaded"
+  printf '%s\n%s\nlauncher=%s\n' "$version" "$pid" "$launcher" > "$home/state/.pi-turnend-extension-loaded"
 }
 
 write_pi_loaded_markers() {
-  local home=$1 root=$2 pid=$3
-  write_pi_watch_loaded_marker "$home" "$root" "$pid"
-  write_pi_turnend_loaded_marker "$home" "$root" "$pid"
+  local home=$1 root=$2 pid=$3 launcher=${4:-pi}
+  write_pi_watch_loaded_marker "$home" "$root" "$pid" "$launcher"
+  write_pi_turnend_loaded_marker "$home" "$root" "$pid" "$launcher"
 }
 
 # --- context digest: absent vs empty vs present -----------------------------
@@ -1372,6 +1372,33 @@ EOF
   pass "session start accepts current Pi markers written before lock acquisition"
 }
 
+test_pi_diagnostic_rejects_unbound_launcher_markers() {
+  local rec root home fakebin out holder_pid watch_version turnend_version
+  rec=$(new_world pi-unbound-launcher-marker)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+
+  sleep 300 &
+  holder_pid=$!
+  make_fake_ps_pi_holder "$fakebin" "$holder_pid"
+  install_pi_turnend_extension_fixture "$root"
+  install_pi_watch_extension_fixture "$root"
+  watch_version=$(hash_file_for_test "$root/.pi/extensions/fm-primary-pi-watch.ts")
+  turnend_version=$(hash_file_for_test "$root/.pi/extensions/fm-primary-turnend-guard.ts")
+  printf '%s\n%s\nlauncher=\n' "$watch_version" "$holder_pid" > "$home/state/.pi-watch-extension-loaded"
+  printf '%s\n%s\nlauncher=\n' "$turnend_version" "$holder_pid" > "$home/state/.pi-turnend-extension-loaded"
+
+  out=$(FM_FAKE_HARNESS=pi run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+
+  assert_contains "$out" "PI_WATCH_EXTENSION: not loaded" "pi diagnostic trusted extensions discovered outside the absolute-path launcher"
+
+  pass "session start rejects Pi markers without the absolute-path launcher identity"
+}
+
 test_pi_diagnostic_rejects_missing_turnend_guard_marker() {
   local rec root home fakebin out holder_pid
   rec=$(new_world pi-missing-turnend-marker)
@@ -1451,6 +1478,7 @@ test_supervision_block_exactly_one_and_pi_diagnostic
 test_pi_signed_primary_uses_pi_extensions_without_identity_normalization
 test_pi_diagnostic_rejects_stale_loaded_marker
 test_pi_diagnostic_accepts_prelock_loaded_marker
+test_pi_diagnostic_rejects_unbound_launcher_markers
 test_pi_diagnostic_rejects_missing_turnend_guard_marker
 test_pi_diagnostic_rejects_previous_session_loaded_marker
 

@@ -85,6 +85,7 @@ const config = process.env.FM_CONFIG_OVERRIDE || `${fmHome}/config`;
 const armScript = `${fmRoot}/bin/fm-watch-arm.sh`;
 const marker = `${state}/.pi-watch-extension-loaded`;
 const extensionVersion = `sha256:${createHash("sha256").update(readFileSync(extensionFile)).digest("hex")}`;
+const launchIdentity = process.env.FM_PI_HARNESS || "";
 const retryBaseMs = positiveInteger("FM_WATCH_REARM_RETRY_BASE_MS", 250);
 const retryMaxMs = positiveInteger("FM_WATCH_REARM_RETRY_MAX_MS", 4000);
 const retryLimit = positiveInteger("FM_WATCH_REARM_RETRY_LIMIT", 5);
@@ -143,9 +144,14 @@ function lockOwnership(): LockOwnership {
 }
 
 function markLoaded(): void {
-  if (lockOwnership() === "other") return;
+  const ownership = lockOwnership();
+  if (ownership === "other") return;
+  if (ownership === "owned") {
+    const lockPid = readFileSync(`${state}/.lock`, "utf8").trim();
+    if (lockPid !== String(process.pid) && parentPid(String(process.pid)) !== lockPid) return;
+  }
   mkdirSync(state, { recursive: true });
-  writeFileSync(marker, `${extensionVersion}\n${process.pid}\n`);
+  writeFileSync(marker, `${extensionVersion}\n${process.pid}\nlauncher=${launchIdentity}\n`);
 }
 
 function actionableLine(output: string): string {
@@ -453,25 +459,31 @@ export default function (pi: ExtensionAPI) {
     };
   }
 
-  function establishCycle(owner: SessionGeneration): void {
+  async function establishCycle(owner: SessionGeneration): Promise<void> {
     if (!generationIsLive(owner) || lockOwnership() !== "owned") return;
     const result = startArm(owner);
-    if (!result.ok) surfaceFailure(owner, result.message);
+    if (!result.ok) {
+      surfaceFailure(owner, result.message);
+      return;
+    }
+    const armChild = owner.child;
+    if (armChild) await waitForReadiness(armChild);
   }
 
-  pi.on?.("session_start", () => {
+  pi.on?.("session_start", async () => {
     if (generation.stopping) generation = createGeneration();
     activateGeneration(generation);
     markLoaded();
-    establishCycle(generation);
+    await establishCycle(generation);
   });
   pi.on?.("session_shutdown", () => {
     stopGeneration(generation);
   });
-  pi.on?.("agent_settled", () => {
+  pi.on?.("agent_settled", async () => {
     // Fresh sessions receive their lock while handling the session-start nudge,
-    // after session_start has already fired. This is the first lock-owned point.
-    establishCycle(generation);
+    // after session_start has already fired. Wait until the arm is ready so the
+    // later-loaded turn-end guard cannot race lifecycle-owned establishment.
+    await establishCycle(generation);
   });
 
   pi.registerCommand?.("fm-watch-arm-pi", {

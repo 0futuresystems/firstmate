@@ -26,6 +26,6 @@ command -v "$HARNESS" >/dev/null 2>&1 || {
 exec env FM_PI_HARNESS="$HARNESS" "$HARNESS" \
   --no-extensions \
   -e "$FM_ROOT/.pi/extensions/fm-calm.ts" \
-  -e "$FM_ROOT/.pi/extensions/fm-primary-turnend-guard.ts" \
   -e "$FM_ROOT/.pi/extensions/fm-primary-pi-watch.ts" \
+  -e "$FM_ROOT/.pi/extensions/fm-primary-turnend-guard.ts" \
   "$@"
