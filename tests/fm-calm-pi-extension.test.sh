@@ -15,6 +15,18 @@ WATCH_EXT="$ROOT/.pi/extensions/fm-primary-pi-watch.ts"
 OPERATIONAL_INPUT="$ROOT/bin/fm-operational-input.sh"
 PI_OPERATIONAL_INPUT="$ROOT/.pi/extensions/lib/fm-operational-input.ts"
 PI_PACKAGE_DIR=${FM_PI_PACKAGE_DIR:-"$(npm root -g 2>/dev/null)/@earendil-works/pi-coding-agent"}
+JITI_MODULE="$PI_PACKAGE_DIR/node_modules/jiti/lib/jiti.mjs"
+NODE_TS_PRELOAD="$TMP_ROOT/node-ts-preload.mjs"
+if [ -f "$JITI_MODULE" ]; then
+  printf 'import { createJiti } from "file://%s";\nglobalThis.fmImportTs = createJiti(import.meta.url).import;\n' \
+    "$JITI_MODULE" > "$NODE_TS_PRELOAD"
+else
+  printf 'globalThis.fmImportTs = (id) => import(id);\n' > "$NODE_TS_PRELOAD"
+fi
+NODE_TS_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import=$NODE_TS_PRELOAD"
+node() {
+  NODE_OPTIONS="$NODE_TS_OPTIONS" command node "$@"
+}
 TMUX_SOCKET="fm-calm-$$"
 TMUX_SESSION="fm-calm-e2e"
 # Verified against Pi 0.81.1 and 0.82.0 (docs/calm-mode-feasibility.md). This is
@@ -44,6 +56,16 @@ wait_for_text() {
     # editor remain visible.
     tmux -L "$TMUX_SOCKET" capture-pane -p -t "$TMUX_SESSION" -S -600 >"$file" 2>/dev/null || true
     grep -Fq "$text" "$file" 2>/dev/null && return 0
+    sleep 0.05
+    i=$((i + 1))
+  done
+  return 1
+}
+
+wait_for_file() {
+  local file=$1 i=0
+  while [ "$i" -lt 120 ]; do
+    [ -s "$file" ] && return 0
     sleep 0.05
     i=$((i + 1))
   done
@@ -109,7 +131,7 @@ test_home_resolution() {
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const extension = await import(`${pathToFileURL(process.env.EXT).href}?home=${Date.now()}`);
+const extension = await globalThis.fmImportTs(`${pathToFileURL(process.env.EXT).href}?home=${Date.now()}`);
 
 function registerCalm() {
   const handlers = new Map();
@@ -131,7 +153,7 @@ function registerCalm() {
       return [];
     },
   };
-  extension.default(pi);
+  (extension.default?.default ?? extension.default)(pi);
   if (!calmCommand || !handlers.has("session_start")) {
     throw new Error("Calm extension did not register its command and session handler");
   }
@@ -261,8 +283,8 @@ const pi = {
 
 let threw = false;
 try {
-  const extension = await import(`${pathToFileURL(process.env.EXT).href}?degraded=${Date.now()}`);
-  extension.default(pi);
+  const extension = await globalThis.fmImportTs(`${pathToFileURL(process.env.EXT).href}?degraded=${Date.now()}`);
+  (extension.default?.default ?? extension.default)(pi);
 } catch {
   threw = true;
 }
@@ -327,8 +349,9 @@ test_pi_compat_missing_adapter_exports() {
     >"$fixture/project/node_modules/@earendil-works/pi-coding-agent/index.js"
 
   out=$(cd "$fixture/project" && node --input-type=module 2>&1 <<'JS'
-const assistant = await import("./.pi/extensions/lib/fm-calm-assistant-layout.ts");
-const operational = await import("./.pi/extensions/lib/fm-calm-operational-user-layout.ts");
+import { pathToFileURL } from "node:url";
+const assistant = await globalThis.fmImportTs(pathToFileURL(`${process.cwd()}/.pi/extensions/lib/fm-calm-assistant-layout.ts`).href);
+const operational = await globalThis.fmImportTs(pathToFileURL(`${process.cwd()}/.pi/extensions/lib/fm-calm-operational-user-layout.ts`).href);
 
 for (const [name, install, expected] of [
   ["collapsed-thinking", assistant.installCalmAssistantLayout, "AssistantMessageComponent"],
@@ -415,8 +438,8 @@ function fakePi() {
 // entirely skipped, so a non-Calm user contests nothing.
 process.env.FM_HOME = process.env.HOME_OFF;
 const offRun = fakePi();
-const extensionOff = await import(`${pathToFileURL(process.env.EXT).href}?gate-off=${Date.now()}`);
-extensionOff.default(offRun.pi);
+const extensionOff = await globalThis.fmImportTs(`${pathToFileURL(process.env.EXT).href}?gate-off=${Date.now()}`);
+(extensionOff.default?.default ?? extensionOff.default)(offRun.pi);
 if (offRun.tools.length !== 0) {
   throw new Error(`Calm registered ${offRun.tools.length} built-ins while config/calm was absent: ${offRun.tools.map((t) => t.name).join(",")}`);
 }
@@ -426,8 +449,8 @@ if (offRun.tools.length !== 0) {
 // transcript render depends on - not deferred to session_start or later.
 process.env.FM_HOME = process.env.HOME_ON;
 const onRun = fakePi();
-const extensionOn = await import(`${pathToFileURL(process.env.EXT).href}?gate-on=${Date.now()}`);
-extensionOn.default(onRun.pi);
+const extensionOn = await globalThis.fmImportTs(`${pathToFileURL(process.env.EXT).href}?gate-on=${Date.now()}`);
+(extensionOn.default?.default ?? extensionOn.default)(onRun.pi);
 const names = onRun.tools.map((t) => t.name).sort();
 const expected = ["bash", "edit", "find", "grep", "ls", "read", "write"];
 if (JSON.stringify(names) !== JSON.stringify(expected)) {
@@ -540,8 +563,8 @@ const pi = {
 
 let threw = false;
 try {
-  const extension = await import(`${pathToFileURL(process.env.EXT).href}?activation=${Date.now()}`);
-  extension.default(pi);
+  const extension = await globalThis.fmImportTs(`${pathToFileURL(process.env.EXT).href}?activation=${Date.now()}`);
+  (extension.default?.default ?? extension.default)(pi);
 } catch {
   threw = true;
 }
@@ -756,10 +779,10 @@ const pi = {
     }));
   },
 };
-const extension = await import(`${pathToFileURL(process.env.EXT).href}?test=${Date.now()}`);
-extension.default(pi);
-const visibility = await import(`${pathToFileURL(`${process.cwd()}/lib/fm-calm-visibility.ts`).href}?policy=${Date.now()}`);
-const operationalInput = await import(`${pathToFileURL(`${process.cwd()}/lib/fm-operational-input.ts`).href}?input=${Date.now()}`);
+const extension = await globalThis.fmImportTs(`${pathToFileURL(process.env.EXT).href}?test=${Date.now()}`);
+(extension.default?.default ?? extension.default)(pi);
+const visibility = await globalThis.fmImportTs(`${pathToFileURL(`${process.cwd()}/lib/fm-calm-visibility.ts`).href}?policy=${Date.now()}`);
+const operationalInput = await globalThis.fmImportTs(`${pathToFileURL(`${process.cwd()}/lib/fm-operational-input.ts`).href}?input=${Date.now()}`);
 
 // Registration is gated on config/calm at load (see fm-calm.ts's file header); this
 // fixture has no config/calm file, so nothing is registered yet. Every render-
@@ -827,6 +850,7 @@ const operationalMode = {
   chatContainer: operationalChat,
   editor: { addToHistory: (value) => operationalHistory.push(value) },
   getMarkdownThemeWithSettings: () => undefined,
+  getMarkdownTransformers: () => [],
   getUserMessageText: (message) => typeof message.content === "string"
     ? message.content
     : message.content.filter((item) => item.type === "text").map((item) => item.text).join(""),
@@ -911,8 +935,8 @@ const watchPi = {
   registerCommand() {},
   registerEntryRenderer() {},
 };
-const watchExtension = await import(`${pathToFileURL(process.env.WATCH_EXT).href}?test=${Date.now()}`);
-watchExtension.default(watchPi);
+const watchExtension = await globalThis.fmImportTs(`${pathToFileURL(process.env.WATCH_EXT).href}?test=${Date.now()}`);
+(watchExtension.default?.default ?? watchExtension.default)(watchPi);
 const watchTool = tools.find((tool) => tool.name === "fm_watch_arm_pi");
 if (!watchTool) throw new Error("Firstmate watcher extension did not register fm_watch_arm_pi");
 const stockWatchTool = { ...watchTool };
@@ -1984,7 +2008,7 @@ const [{ initTheme, theme }, { visibleWidth, setCapabilities }] = await Promise.
 initTheme("dark");
 setCapabilities({ images: null, trueColor: true, hyperlinks: false });
 
-const ship = await import(
+const ship = await globalThis.fmImportTs(
   `${pathToFileURL(`${process.cwd()}/lib/fm-calm-working-ship.ts`).href}?ship=${Date.now()}`
 );
 const {
@@ -2539,8 +2563,8 @@ const pi = {
   sendUserMessage: (...args) => sessionWrites.push(["sendUserMessage", ...args]),
   setSessionName: (...args) => sessionWrites.push(["setSessionName", ...args]),
 };
-const extension = await import(`${pathToFileURL(process.env.EXT).href}?ship=${Date.now()}`);
-extension.default(pi);
+const extension = await globalThis.fmImportTs(`${pathToFileURL(process.env.EXT).href}?ship=${Date.now()}`);
+(extension.default?.default ?? extension.default)(pi);
 check(!!calmCommand, "Calm command was not registered");
 for (const event of ["session_start", "agent_start", "agent_settled", "session_shutdown"]) {
   check(handlers.has(event), `Calm did not register a ${event} handler`);
@@ -2815,7 +2839,7 @@ JS
 }
 
 test_interactive_terminal_e2e() {
-  local project config home session_file export_file export_dom default_snapshot expanded_snapshot hidden_snapshot active_before_snapshot active_hidden_snapshot export_snapshot restored_snapshot working_snapshot working_response_snapshot restarted_snapshot resumed_restored_snapshot hash_before hash_after now version chrome chrome_pid chrome_wait active_wait active_screen_wait boat_frame_one boat_frame_two boat_resized_snapshot boat_focus_snapshot boat_cleared_snapshot boat_hull_line boat_sail_line boat_column_one boat_column_two boat_line boat_color_snapshot boat_color_line boat_water_snapshot boat_water_line boat_water_first boat_water_changed boat_narrow_snapshot boat_narrow_sails boat_freeze_snapshot boat_resume_snapshot boat_freeze_column boat_freeze_sail boat_resume_column boat_resume_sail
+  local project config home session_file export_file export_dom default_snapshot expanded_snapshot hidden_snapshot active_before_snapshot active_hidden_snapshot restored_snapshot working_snapshot working_response_snapshot restarted_snapshot resumed_restored_snapshot hash_before hash_after now version chrome chrome_pid chrome_wait active_wait active_screen_wait boat_frame_one boat_frame_two boat_resized_snapshot boat_focus_snapshot boat_cleared_snapshot boat_hull_line boat_sail_line boat_column_one boat_column_two boat_line boat_color_snapshot boat_color_line boat_water_snapshot boat_water_line boat_water_first boat_water_changed boat_narrow_snapshot boat_narrow_sails boat_freeze_snapshot boat_resume_snapshot boat_freeze_column boat_freeze_sail boat_resume_column boat_resume_sail
   if ! command -v pi >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
     echo "skip: pi or tmux not found for Pi calm interactive E2E"
     return 0
@@ -2834,7 +2858,6 @@ test_interactive_terminal_e2e() {
   hidden_snapshot="$TMP_ROOT/hidden.txt"
   active_before_snapshot="$TMP_ROOT/active-before.txt"
   active_hidden_snapshot="$TMP_ROOT/active-hidden.txt"
-  export_snapshot="$TMP_ROOT/export.txt"
   restored_snapshot="$TMP_ROOT/restored.txt"
   working_snapshot="$TMP_ROOT/working.txt"
   working_response_snapshot="$TMP_ROOT/working-response.txt"
@@ -3238,7 +3261,7 @@ JS
 
   tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" -l "/export $export_file"
   tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" M-s
-  wait_for_text "$export_snapshot" "Session exported to: $export_file" \
+  wait_for_file "$export_file" \
     || fail "/export did not complete while calm mode was on"
   node - "$export_file" <<'JS' || fail "calm-mode HTML export lost tool data or persisted synthetic provenance"
 const html = require("node:fs").readFileSync(process.argv[2], "utf8");

@@ -15,7 +15,7 @@ export NODE_NO_WARNINGS=1
 # The production extensions are TypeScript. Load them through Pi's bundled Jiti
 # loader instead of depending on the host Node build's optional TS support.
 command -v npm >/dev/null 2>&1 \
-  || { echo 'not ok - npm is required to locate Pi\x27s extension loader' >&2; exit 1; }
+  || { printf '%s\n' "not ok - npm is required to locate Pi's extension loader" >&2; exit 1; }
 PI_PACKAGE_DIR=${FM_PI_PACKAGE_DIR:-"$(npm root -g)/@earendil-works/pi-coding-agent"}
 JITI_REGISTER="$PI_PACKAGE_DIR/node_modules/jiti/lib/jiti-register.mjs"
 [ -f "$JITI_REGISTER" ] \

@@ -18,6 +18,13 @@ set -u
 SPAWN="$ROOT/bin/fm-spawn.sh"
 TMP_ROOT=$(fm_test_tmproot fm-busy-adapter-wiring)
 
+# Node releases before native TypeScript support need Pi's own extension loader
+# to execute the generated .ts artifact in this plain Node fixture.
+PI_PACKAGE_DIR=${FM_PI_PACKAGE_DIR:-"$(npm root -g 2>/dev/null || true)/@earendil-works/pi-coding-agent"}
+JITI_MODULE="$PI_PACKAGE_DIR/node_modules/jiti/lib/jiti.mjs"
+[ -f "$JITI_MODULE" ] || JITI_MODULE=
+export JITI_MODULE
+
 make_spawn_fakebin() {
   local dir=$1 fakebin
   fakebin=$(fm_fakebin "$dir")
@@ -87,9 +94,15 @@ classify() {  # <harness> <id> <state-dir>
 drive_pi_ext() {
   EXT_PATH="$1" MODE="$2" node --input-type=module 2>&1 <<'EOF'
 import { pathToFileURL } from "node:url";
-const mod = await import(pathToFileURL(process.env.EXT_PATH).href);
+let mod;
+if (process.env.JITI_MODULE) {
+  const { createJiti } = await import(pathToFileURL(process.env.JITI_MODULE).href);
+  mod = await createJiti(import.meta.url).import(process.env.EXT_PATH);
+} else {
+  mod = await import(pathToFileURL(process.env.EXT_PATH).href);
+}
 const handlers = {};
-mod.default({ on: (name, fn) => { handlers[name] = fn; } });
+(mod.default?.default ?? mod.default)({ on: (name, fn) => { handlers[name] = fn; } });
 const ctx = { isIdle: () => process.env.MODE !== "settle-continuing" };
 switch (process.env.MODE) {
   case "agent-start": await handlers["agent_start"]({}, ctx); break;
@@ -186,7 +199,8 @@ drive_oc_plugin() {
   PLUGIN_PATH="$plugin" node --input-type=module - "$@" 2>&1 <<'EOF'
 import { pathToFileURL } from "node:url";
 const mod = await import(pathToFileURL(process.env.PLUGIN_PATH).href);
-const hooks = await mod.FmBusyState({});
+const plugin = mod.default && typeof mod.default === "object" ? mod.default : mod;
+const hooks = await plugin.FmBusyState({});
 for (const arg of process.argv.slice(2)) {
   await hooks.event({ event: JSON.parse(arg) });
 }

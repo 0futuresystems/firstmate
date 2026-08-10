@@ -27,6 +27,14 @@ pass() { printf 'ok - %s\n' "$1"; }
 command -v herdr >/dev/null 2>&1 || { echo 'skip: herdr not found'; exit 0; }
 command -v jq >/dev/null 2>&1 || { echo 'skip: jq not found'; exit 0; }
 command -v python3 >/dev/null 2>&1 || { echo 'skip: python3 not found'; exit 0; }
+HERDR_VERSION=$(herdr --version 2>/dev/null | awk '{print $NF}')
+python3 - "$HERDR_VERSION" <<'PY' || { echo "skip: Herdr 0.7.5 or newer required (found ${HERDR_VERSION:-unknown})"; exit 0; }
+import re
+import sys
+
+match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+].*)?", sys.argv[1])
+raise SystemExit(0 if match and tuple(map(int, match.groups())) >= (0, 7, 5) else 1)
+PY
 [ -x "$HERDR_LAB_HELPER" ] || { echo "skip: Herdr lab helper not executable at $HERDR_LAB_HELPER"; exit 0; }
 
 HERDR_ORIGINAL_PATH=$PATH
