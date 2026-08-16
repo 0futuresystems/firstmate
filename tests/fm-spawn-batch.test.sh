@@ -16,6 +16,14 @@ SPAWN="$ROOT/bin/fm-spawn.sh"
 TMP_ROOT=$(fm_test_tmproot fm-spawn-batch)
 export FM_BACKEND=tmux
 
+# An empty config dir, not the checkout's own. A real operating home keeps local
+# config/ files here, and config/crew-dispatch.json makes fm-spawn demand an
+# explicit resolved harness - a backstop these argument-routing cases never
+# supply. Pointing at an empty directory keeps the assertions about argument
+# routing rather than about whichever config the host happens to carry.
+EMPTY_CONFIG="$TMP_ROOT/empty-config"
+mkdir -p "$EMPTY_CONFIG"
+
 # Clear ambient firstmate overrides so the behavior test owns its environment.
 run_spawn() {
   FM_ROOT_OVERRIDE='' \
@@ -23,7 +31,7 @@ run_spawn() {
     FM_STATE_OVERRIDE='' \
     FM_DATA_OVERRIDE='' \
     FM_PROJECTS_OVERRIDE='' \
-    FM_CONFIG_OVERRIDE='' \
+    FM_CONFIG_OVERRIDE="$EMPTY_CONFIG" \
     FM_SPAWN_NO_GUARD=1 \
     "$SPAWN" "$@" 2>&1
 }
