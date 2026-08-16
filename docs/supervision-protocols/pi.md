@@ -2,6 +2,7 @@ Mode: Pi extension background wake.
 
 When this session owns supervision and away mode is not active:
 1. Drain first with `bin/fm-wake-drain.sh`.
+   After handling all emitted wakes and reconciling open decisions and unread status lines, run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`; until then the work remains durable for idempotent re-handling after interruption.
 2. Pi primaries must start through `bin/fm-pi.sh` (or `FM_PI_HARNESS=pi-signed bin/fm-pi.sh`). It disables cwd-dependent discovery, loads the watcher before the turn-end guard by absolute path, and binds both loaded markers to that launcher identity without global installation or project-trust dependence.
 3. The watcher extension establishes and verifies the first cycle after this Pi process owns the Firstmate lock, then keeps the child attached to the live Pi process and owns every successor launch.
    Never run `bin/fm-watch-arm.sh` through Pi's bash tool because that foreground arm can wedge the agent and bypasses extension-owned cleanup.
